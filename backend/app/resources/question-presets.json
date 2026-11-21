@@ -1,0 +1,20 @@
+{
+  "presets": [
+    {
+      "id": "cataract-surgery",
+      "name": "Operacija sive mrene",
+      "questions": [
+        { "text": "Kako se danes počutite?", "answer_type": "free_text", "flag_rules": [] },
+        { "text": "Ali z operiranim očesom vidite dobro?", "answer_type": "yes_no", "flag_rules": [{ "when": "no", "level": "high" }] },
+        { "text": "Ali vas oko boli? Kako močno, od 0 do 10?", "answer_type": "scale_0_10", "flag_rules": [{ "min": 7, "max": 10, "level": "high" }, { "min": 4, "max": 6, "level": "medium" }] },
+        { "text": "Ali je oko bolj rdeče kot včeraj?", "answer_type": "yes_no", "flag_rules": [{ "when": "yes", "level": "medium" }] },
+        { "text": "Ali se iz očesa kaj cedi?", "answer_type": "yes_no", "flag_rules": [{ "when": "yes", "level": "medium" }] },
+        { "text": "Ali vidite bliske, pike ali temno senco?", "answer_type": "yes_no", "flag_rules": [{ "when": "yes", "level": "high" }] },
+        { "text": "Ali vam je slabo ali ste bruhali?", "answer_type": "yes_no", "flag_rules": [{ "when": "yes", "level": "high" }] },
+        { "text": "Ali ste danes kapali kapljice za oko?", "answer_type": "yes_no", "flag_rules": [{ "when": "no", "level": "low" }] },
+        { "text": "Ali ponoči nosite ščitnik za oko?", "answer_type": "yes_no", "flag_rules": [{ "when": "no", "level": "low" }] },
+        { "text": "Bi radi zdravniku še kaj sporočili?", "answer_type": "free_text", "flag_rules": [] }
+      ]
+    }
+  ]
+}

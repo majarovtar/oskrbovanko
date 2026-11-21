@@ -1,0 +1,45 @@
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.badgeCritical {
+  background: #c62828;
+}
+
+.badgeNormal {
+  background: #2e7d32;
+}
+
+.reasons {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: #c62828;
+}
+
+.vitals {
+  margin-top: 0.5rem;
+  color: #444;
+}
+
+.toggle {
+  margin-top: 0.75rem;
+}

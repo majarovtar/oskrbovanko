@@ -1,0 +1,19 @@
+.tagline {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.patientList {
+  list-style: none;
+  padding: 0;
+}
+
+.patientItem {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.callTime {
+  color: #777;
+  margin-left: 0.5rem;
+}

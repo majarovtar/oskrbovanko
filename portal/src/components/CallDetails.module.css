@@ -1,0 +1,46 @@
+.details {
+  margin-top: 0.75rem;
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+}
+
+.answerRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.flagBadge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: #fff;
+}
+
+.flagHigh {
+  background: #c62828;
+}
+
+.flagMedium {
+  background: #ef6c00;
+}
+
+.flagLow {
+  background: #757575;
+}
+
+.section {
+  margin-top: 0.6rem;
+}
+
+.sectionLabel {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.transcript {
+  white-space: pre-wrap;
+}
