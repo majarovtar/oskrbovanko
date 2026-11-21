@@ -5,4 +5,4 @@ router = APIRouter()
 
 @router.get("/")
 def service_info() -> dict:
-    return {"name": "CareCall"}
+    return {"name": "MojOdpust"}

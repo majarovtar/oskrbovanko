@@ -158,57 +158,6 @@ wheels = [
 ]
 
 [[package]]
-name = "carecall-backend"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pwdlib", extra = ["argon2"] },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "python-dotenv" },
-    { name = "resend" },
-    { name = "sqlalchemy" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "websockets" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
-    { name = "pwdlib", extras = ["argon2"], specifier = ">=0.2" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.5" },
-    { name = "pyjwt", specifier = ">=2.9" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "resend", specifier = ">=2.5" },
-    { name = "sqlalchemy", specifier = ">=2.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
-    { name = "websockets", specifier = ">=13.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "ruff", specifier = ">=0.7" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.11.20"
 source = { registry = "https://pypi.org/simple" }
@@ -712,6 +661,57 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/80/03b4173a8022c2182f03fc2d89daa6e27e63de1ab86c9d972b74e2bf2196/librt-0.17.0-cp315-cp315t-win32.whl", hash = "sha256:d7ba54178e46264de221455ca84e26680debc5ccdb3d11cf8fc64b83e0a91854", size = 114883, upload-time = "2026-11-19T14:10:46.091Z" },
     { url = "https://files.pythonhosted.org/packages/c4/d7/f563218dc47a38f06e3504ae7f67cab188d484848cec50a363a527050a17/librt-0.17.0-cp315-cp315t-win_amd64.whl", hash = "sha256:9c67ede964192c970426aa09d6a7ccfb6a5e41b75462309d93547c6a11e15b10", size = 140448, upload-time = "2026-11-19T14:10:47.136Z" },
     { url = "https://files.pythonhosted.org/packages/7b/75/c3d79629d6894242ffbb70b34d48006f6a5c25127958748aba71d19ce6fa/librt-0.17.0-cp315-cp315t-win_arm64.whl", hash = "sha256:bdc73adb6376765fa8955ba936ed297277c814395eac82e862c621ff3b354602", size = 128548, upload-time = "2026-11-19T14:10:48.224Z" },
+]
+
+[[package]]
+name = "mojodpust-backend"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pwdlib", extra = ["argon2"] },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "python-dotenv" },
+    { name = "resend" },
+    { name = "sqlalchemy" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pwdlib", extras = ["argon2"], specifier = ">=0.2" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "pyjwt", specifier = ">=2.9" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "resend", specifier = ">=2.5" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "websockets", specifier = ">=13.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "ruff", specifier = ">=0.7" },
 ]
 
 [[package]]

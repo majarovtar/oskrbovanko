@@ -31,7 +31,7 @@ def test_sends_a_real_email_via_resend() -> None:
         {
             "from": settings.critical_call_email_from,
             "to": settings.critical_call_email_to_list,
-            "subject": "CareCall live test email",
+            "subject": "MojOdpust live test email",
             "html": "<p>This is a live test email sent by <strong>test_email_live.py</strong>.</p>",
         }
     )

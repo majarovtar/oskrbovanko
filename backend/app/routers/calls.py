@@ -87,7 +87,7 @@ def submit_call(
     db.commit()
     db.refresh(call)
 
-    reassess_and_notify(db, call, patient.name, background_tasks)
+    reassess_and_notify(db, call, patient.name, background_tasks, new_entry=True)
     db.refresh(call)
     return call_to_out(call)
 
