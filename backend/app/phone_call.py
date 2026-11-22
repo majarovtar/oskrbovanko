@@ -110,10 +110,14 @@ def prepare_audio() -> None:
 
 # ------------------------------------------------------------------ meritev (prst na napravi)
 # Naprava pošlje meritev na POST /vitals; po MEASURE_WAIT_S jo preberemo iz baze.
-DEVICE_GRACE_S = 10  # koliko sekund po meritvi še čakamo, da meritev naprave pride v bazo
+# Koliko sekund po meritvi še čakamo, da meritev naprave pride v bazo. Naprava jo pošlje
+# z zamikom (~1 min po začetku klica); čakanje teče v ozadju, vprašanja se nadaljujejo.
+DEVICE_GRACE_S = 120
 # Samo če meritev naprave ne pride v bazo: ti dve vrednosti shranimo namesto nje.
 FALLBACK_PULSE = 72
 FALLBACK_SPO2 = 97
+# Pacienti, pri katerih stalnih vrednosti ne shranimo (testiranje s pravo napravo).
+NO_FALLBACK_PATIENTS = {"Angelca Hrovat"}
 
 
 # ------------------------------------------------------------------ klic skrbniku (nujno)

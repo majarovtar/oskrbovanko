@@ -195,6 +195,10 @@ def _record_measurement(call_sid: str, patient_id: uuid.UUID, call_started: date
         db = SessionLocal()
         try:
             vitals = db.get(Vitals, device_id) if device_id else None
+            patient = db.get(Patient, patient_id)
+            if vitals is None and patient is not None and patient.name in phone_call.NO_FALLBACK_PATIENTS:
+                logger.warning("call %s: no measurement from the device - nothing saved", call_sid)
+                return
             if vitals is None:
                 logger.warning("call %s: no measurement from the device - saving fixed values", call_sid)
                 vitals = Vitals(patient_id=patient_id, pulse=phone_call.FALLBACK_PULSE,
