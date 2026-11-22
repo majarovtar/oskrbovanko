@@ -120,7 +120,7 @@ export function RealDoctorDashboard() {
                 <div><p className="text-xs text-muted-foreground">SpO₂</p><p>{vitals ? `${vitals.spo2} %` : "Ni podatka"}</p></div>
               </div>
               {r.error && <p className="mt-2 text-xs text-destructive">{r.error}</p>}
-              <div className="mt-3 flex justify-end"><Link to="/zdravnik/pacienti" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">Klici in meritve <ArrowRight className="size-4" /></Link></div>
+              <div className="mt-3 flex justify-end"><Link to="/zdravnik/pacient/$id" params={{ id: r.patient.id }} className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">Odpri pacienta <ArrowRight className="size-4" /></Link></div>
             </article>;
           })}</div>}
       </section>
