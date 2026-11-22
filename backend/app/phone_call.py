@@ -4,7 +4,8 @@ Potek:
   1. zdravnik klikne "Pokliči" -> POST /patients/{id}/phone-call -> Twilio pokliče pacienta,
   2. Twilio med klicem kliče naše /twilio/... naslove (prek javnega URL-ja / tunela),
   3. vprašanja izgovori Azure glas (posnetki v tts_cache/), odgovore prepozna Twilio (sl-SI),
-  4. vsak odgovor se takoj shrani v bazo (calls + answers); po zadnjem se pošlje e-mail.
+  4. na začetku pacient položi prst na merilno napravo (20 s); meritev gre v tabelo vitals,
+  5. vsak odgovor se shrani v bazo (calls + answers); po nujnem klicu e-pošta + klic skrbniku.
 
 Trial račun: brez <Redirect> (dovoli jih le nekaj), zato naslednje vprašanje Twilio dobi
 v odgovoru na prejšnji odgovor; ob tišini actionOnEmptyResult pokliče isti action.
@@ -36,18 +37,17 @@ logger = logging.getLogger("app.phone_call")
 
 # ------------------------------------------------------------------ vsebina klica
 QUESTIONS = [
-    "Kako se danes počutite?",
     "Ali z operiranim očesom vidite dobro?",
-    "Ali vas oko boli? Kako močno, od nič do deset?",
     "Ali je oko bolj rdeče kot včeraj?",
     "Ali vidite bliske, pike ali temno senco?",
     "Ali vam je slabo ali ste bruhali?",
     "Ali ste danes kapali kapljice za oko?",
     "Ali ponoči nosite ščitnik za oko?",
-    "Bi radi zdravniku še kaj sporočili?",
 ]
 INTRO = ("Dober dan. Tukaj avtomatska asistentka. Kličem zaradi pregleda po operaciji. "
-         "Postavila vam bom nekaj vprašanj.")
+         "Prosim, položite prst na merilno napravo in ga ne premikajte. Meritev traja dvajset sekund.")
+MEASURE_WAIT_S = 20  # koliko sekund naprava meri (utrip, kisik), preden začnemo z vprašanji
+MEASURED = "Hvala, meritev je končana. Zdaj vam bom postavila nekaj vprašanj."
 REPEAT = "Oprostite, nisem vas slišala."
 GOODBYE = ("Hvala za odgovore. Posredovali jih bomo zdravniku. "
            "V nujnem primeru pokličite sto dvanajst. Na svidenje.")
@@ -106,8 +106,16 @@ def synthesize(text: str) -> str:
 
 def prepare_audio() -> None:
     """Vsa stalna besedila klica enkrat pretvori v govor; obstoječa preskoči."""
-    for text in [INTRO, REPEAT, GOODBYE, GUARDIAN_MESSAGE, *QUESTIONS]:
+    for text in [INTRO, MEASURED, REPEAT, GOODBYE, GUARDIAN_MESSAGE, *QUESTIONS]:
         synthesize(text)
+
+
+# ------------------------------------------------------------------ meritev (prst na napravi)
+# Naprava pošlje meritev na POST /vitals; po MEASURE_WAIT_S jo preberemo iz baze.
+DEVICE_GRACE_S = 10  # koliko sekund po meritvi še čakamo, da meritev naprave pride v bazo
+# Samo če meritev naprave ne pride v bazo: ti dve vrednosti shranimo namesto nje.
+FALLBACK_PULSE = 72
+FALLBACK_SPO2 = 97
 
 
 # ------------------------------------------------------------------ klic skrbniku (nujno)
@@ -359,7 +367,9 @@ def question_twiml(base: str, patient_id: str, number: int, repeat: bool, before
 
 
 def intro_twiml(base: str, patient_id: str) -> str:
-    return question_twiml(base, patient_id, 1, repeat=False, before=_play(base, INTRO))
+    """Pozdrav, prošnja za meritev (prst na napravo), 20 s premora, nato prvo vprašanje."""
+    before = f'{_play(base, INTRO)}<Pause length="{MEASURE_WAIT_S}"/>{_play(base, MEASURED)}'
+    return question_twiml(base, patient_id, 1, repeat=False, before=before)
 
 
 def goodbye_twiml(base: str) -> str:

@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -19,7 +19,7 @@ from app.calls_service import recompute_severity
 from app.config import settings
 from app.db import SessionLocal, get_db
 from app.deps import Principal, ensure_doctor_or_admin, ensure_patient_access, get_principal
-from app.models import Account, Answer, Call, Patient, PatientAccount
+from app.models import Account, Answer, Call, Patient, PatientAccount, Vitals
 from app.notify import send_call_notice
 from app.phone_answers import assess_answer
 
@@ -136,9 +136,85 @@ def audio(name: str) -> FileResponse:
 
 @router.post("/twilio/voice", include_in_schema=False)
 async def voice(request: Request, patient_id: uuid.UUID) -> Response:
-    await _twilio_form(request, patient_id)
+    form = await _twilio_form(request, patient_id)
     base = _base()
+    call_sid = form.get("CallSid", "")
+    with _call_rows_lock:
+        first_time = call_sid not in _measuring
+        _measuring.add(call_sid)
+    if first_time:  # po MEASURE_WAIT_S preberemo meritev naprave iz baze
+        started = datetime.now(UTC)
+        threading.Thread(target=_record_measurement, args=(call_sid, patient_id, started), daemon=True).start()
     return _twiml(phone_call.intro_twiml(base, str(patient_id)))
+
+
+# ------------------------------------------------------------------ meritev
+_measuring: set[str] = set()                 # klici, pri katerih meritev že teče
+_call_vitals: dict[str, uuid.UUID] = {}      # Call SID -> id meritve (vitals)
+_claimed_vitals: set[uuid.UUID] = set()      # meritve, ki že pripadajo nekemu klicu
+CLOCK_SKEW_S = 30                            # ura naprave je lahko malo drugačna od strežnika
+
+
+def _device_reading(db: Session, patient_id: uuid.UUID, since: datetime) -> Vitals | None:
+    """Zadnja meritev, ki jo je naprava za tega pacienta poslala na POST /vitals med tem klicem
+    (in je ni že prevzel kak prejšnji klic)."""
+    query = db.query(Vitals).filter(Vitals.patient_id == patient_id, Vitals.measured_at >= since)
+    with _call_rows_lock:
+        claimed = list(_claimed_vitals)
+    if claimed:
+        query = query.filter(Vitals.id.not_in(claimed))
+    return query.order_by(Vitals.measured_at.desc()).first()
+
+
+def _record_measurement(call_sid: str, patient_id: uuid.UUID, call_started: datetime) -> None:
+    """Po 20 s meritve prebere meritev naprave iz baze (POST /vitals) in jo poveže s klicem.
+
+    Če meritev naprave ne pride (niti po DEVICE_GRACE_S dodatnih sekundah), v bazo
+    shranimo dve stalni vrednosti (FALLBACK_PULSE, FALLBACK_SPO2).
+    """
+    time.sleep(phone_call.MEASURE_WAIT_S)
+    since = call_started - timedelta(seconds=CLOCK_SKEW_S)
+    deadline = time.monotonic() + phone_call.DEVICE_GRACE_S
+    # Branje (in čakanje) poteka izven _save_lock, da shranjevanje odgovorov ne čaka.
+    device_id: uuid.UUID | None = None
+    db = SessionLocal()
+    try:
+        while True:
+            reading = _device_reading(db, patient_id, since)
+            if reading is not None or time.monotonic() >= deadline:
+                device_id = reading.id if reading is not None else None
+                break
+            db.rollback()  # naslednje branje vidi nove vrstice
+            time.sleep(2)
+    except Exception:
+        logger.exception("reading the measurement of call %s failed", call_sid)
+    finally:
+        db.close()
+
+    with _save_lock:
+        db = SessionLocal()
+        try:
+            vitals = db.get(Vitals, device_id) if device_id else None
+            if vitals is None:
+                logger.warning("call %s: no measurement from the device - saving fixed values", call_sid)
+                vitals = Vitals(patient_id=patient_id, pulse=phone_call.FALLBACK_PULSE,
+                                spo2=phone_call.FALLBACK_SPO2, measured_at=datetime.now(UTC))
+                db.add(vitals)
+                db.flush()
+            with _call_rows_lock:
+                call_id = _call_rows.get(call_sid)
+                _call_vitals[call_sid] = vitals.id
+                _claimed_vitals.add(vitals.id)
+            if call_id is not None:
+                vitals.call_id = call_id
+            db.commit()
+            logger.info("call %s measurement (%s): pulse %s, SpO2 %s", call_sid,
+                        "device" if device_id else "fixed fallback", vitals.pulse, vitals.spo2)
+        except Exception:
+            db.rollback()
+            logger.exception("saving measurement of call %s failed", call_sid)
+        finally:
+            db.close()
 
 
 @router.post("/twilio/answer", include_in_schema=False)
@@ -217,11 +293,15 @@ def _save_answer(
         db.flush()
         with _call_rows_lock:
             _call_rows[call_sid] = call.id
+            vitals_id = _call_vitals.get(call_sid)
+        vitals = db.get(Vitals, vitals_id) if vitals_id else None
+        if vitals is not None:  # meritev z začetka klica pripada temu klicu
+            vitals.call_id = call.id
         # Ob prvem odgovoru začnemo spremljati klic: ko se konča (tudi predčasno),
         # preverimo, ali je nujen (e-pošta zdravniku, klic skrbniku).
         threading.Thread(target=_after_call, args=(call.id, call_sid), daemon=True).start()
 
-    flag = assess_answer(number, text)  # rdeče/oranžno/rumeno: kaj je lahko narobe
+    flag = assess_answer(phone_call.QUESTIONS[number - 1], text)  # rdeče/oranžno/rumeno
     existing = db.query(Answer).filter(Answer.call_id == call.id, Answer.position == number).first()
     if existing is None:
         db.add(Answer(call_id=call.id, position=number, question_text=phone_call.QUESTIONS[number - 1],
@@ -255,6 +335,8 @@ def _after_call(call_id: uuid.UUID, call_sid: str) -> None:
         pass
     with _call_rows_lock:
         _call_rows.pop(call_sid, None)
+        _call_vitals.pop(call_sid, None)
+        _measuring.discard(call_sid)
     db = SessionLocal()
     try:
         call = db.get(Call, call_id)

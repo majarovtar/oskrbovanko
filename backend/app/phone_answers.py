@@ -1,7 +1,6 @@
 """Ocena odgovorov iz telefonskega klica: kateri odgovor kaže, da je lahko kaj narobe.
 
-Vsako od 9 vprašanj ima svoje pravilo (glej RULES v enakem vrstnem redu kot QUESTIONS v
-phone_call.py). Rezultat je oznaka "high" (rdeče), "medium" (oranžno), "low" (rumeno) ali
+Vsako vprašanje ima svoje pravilo (RULES, po besedilu vprašanja iz phone_call.py). Rezultat je oznaka "high" (rdeče), "medium" (oranžno), "low" (rumeno) ali
 None (v redu / nejasno). Oznaka "high" naredi klic nujen (severity "critical").
 
 To je preprosta, pregledna pravila na podlagi besed - ne diagnoza. Nejasen odgovor ostane
@@ -112,22 +111,25 @@ def _free_text(text: str) -> str | None:
     return "medium" if _has(text, _VERY_BAD + ("boli", "slabo", "skrbi")) else None
 
 
-# Enak vrstni red kot QUESTIONS v phone_call.py.
-RULES = [
-    _feeling,                  # Kako se danes počutite?
-    _sight,                    # Ali z operiranim očesom vidite dobro?
-    _pain,                     # Ali vas oko boli? Kako močno, od 0 do 10?
-    _when("yes", "medium", ("rdec", "pordel", "bolj")),          # Ali je oko bolj rdeče kot včeraj?
-    _when("yes", "high", ("vidim", "blisk", "pik", "senc")),     # Ali vidite bliske, pike ali temno senco?
-    _when("yes", "high", ("slab", "bruh")),              # Ali vam je slabo ali ste bruhali?
-    _when("no", "low", ("pozab",)),                               # Ali ste danes kapali kapljice za oko?
-    _when("no", "low", ("pozab",)),                               # Ali ponoči nosite ščitnik za oko?
-    _free_text,                # Bi radi zdravniku še kaj sporočili?
-]
+# Pravilo po besedilu vprašanja. Poleg trenutnih vprašanj (QUESTIONS v phone_call.py)
+# ostajajo tudi prejšnja, da so starejši klici še vedno pravilno obarvani.
+RULES = {
+    "Ali z operiranim očesom vidite dobro?": _sight,
+    "Ali je oko bolj rdeče kot včeraj?": _when("yes", "medium", ("rdec", "pordel", "bolj")),
+    "Ali vidite bliske, pike ali temno senco?": _when("yes", "high", ("vidim", "blisk", "pik", "senc")),
+    "Ali vam je slabo ali ste bruhali?": _when("yes", "high", ("slab", "bruh")),
+    "Ali ste danes kapali kapljice za oko?": _when("no", "low", ("pozab",)),
+    "Ali ponoči nosite ščitnik za oko?": _when("no", "low", ("pozab",)),
+    # prejšnja vprašanja (starejši klici)
+    "Kako se danes počutite?": _feeling,
+    "Ali vas oko boli? Kako močno, od nič do deset?": _pain,
+    "Bi radi zdravniku še kaj sporočili?": _free_text,
+}
 
 
-def assess_answer(position: int, text: str | None) -> str | None:
-    """Oznaka za odgovor na vprašanje `position` (od 1)."""
-    if not text or not 1 <= position <= len(RULES):
+def assess_answer(question: str, text: str | None) -> str | None:
+    """Oznaka za odgovor `text` na vprašanje `question` (None, če vprašanja ne poznamo)."""
+    rule = RULES.get(question)
+    if not text or rule is None:
         return None
-    return RULES[position - 1](text)
+    return rule(text)

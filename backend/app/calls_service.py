@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.models import Call
 from app.notify import send_call_notice
 from app.phone_answers import assess_answer
-from app.phone_call import QUESTIONS as PHONE_QUESTIONS
 from app.schemas import AnswerOut, CallOut, QuestionRef, VitalsSummary
 from app.severity import assess_severity
 
@@ -67,8 +66,8 @@ def _answer_flag(answer) -> str | None:
     uvedbo ocenjevanja) jo izračunamo ob branju, da so vsi klici obarvani enako."""
     if answer.flag is not None:
         return answer.flag
-    if answer.question_text in PHONE_QUESTIONS and isinstance(answer.value_json, str):
-        return assess_answer(PHONE_QUESTIONS.index(answer.question_text) + 1, answer.value_json)
+    if isinstance(answer.value_json, str):
+        return assess_answer(answer.question_text, answer.value_json)
     return None
 
 
