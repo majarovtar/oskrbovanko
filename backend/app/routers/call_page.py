@@ -10,7 +10,7 @@ _PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CareCall - klic</title>
+<title>MojOdpust - klic</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; }
   h1 { font-size: 1.25rem; }
@@ -25,7 +25,7 @@ _PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-  <h1>CareCall - dnevni klic</h1>
+  <h1>MojOdpust - dnevni klic</h1>
   <div id="login-form">
     <input id="email" type="email" placeholder="E-poštni naslov" autocomplete="username" />
     <input id="password" type="password" placeholder="Geslo" autocomplete="current-password" />

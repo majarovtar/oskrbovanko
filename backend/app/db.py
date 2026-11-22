@@ -20,7 +20,13 @@ def _make_engine(database_url: str):
     url = _driver_url(database_url)
     if url.startswith("sqlite://"):
         return create_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    return create_engine(url)
+    # Supabase zapre povezave, ki nekaj časa mirujejo. pool_pre_ping pred uporabo preveri
+    # povezavo in mrtvo zamenja z novo; pool_recycle stare povezave redno osveži.
+    # Supabase (session pooler) dovoli skupaj le 15 povezav za vso ekipo, zato jih en
+    # backend porabi največ 4 (privzeto bi jih lahko 15 in zasedel vse).
+    return create_engine(
+        url, pool_pre_ping=True, pool_recycle=300, pool_size=2, max_overflow=2, pool_timeout=15
+    )
 
 
 engine = _make_engine(settings.database_url)

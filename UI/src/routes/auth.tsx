@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, HeartPulse, Lock, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { login, logout } from "@/lib/api";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -24,15 +25,37 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "forgot">("login");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  // Prijavna stran vedno zahteva novo prijavo: morebitno prejšnjo sejo odjavimo.
+  useEffect(() => {
+    logout();
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "forgot") {
       setSent(true);
       return;
     }
-    // Vizualna prijava — povezava z resničnimi računi sledi z vklopom Lovable Cloud.
-    navigate({ to: "/" });
+    // Prava prijava prek FastAPI (/auth/login); zdravnik gre na seznam svojih pacientov.
+    setError("");
+    setBusy(true);
+    try {
+      const account = await login(email.trim(), password);
+      if (account.role === "doctor") {
+        navigate({ to: "/zdravnik" });
+      } else {
+        logout();
+        setError("Ta račun ni zdravniški. Portal je zaenkrat na voljo samo zdravnikom.");
+      }
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      setError(status === 401 ? "Napačen e-poštni naslov ali geslo." : err instanceof Error ? err.message : "Prijava ni uspela.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -96,11 +119,13 @@ function AuthPage() {
                     Pozabljeno geslo?
                   </button>
                 </div>
+                {error && <p role="alert" className="text-sm font-semibold text-destructive">{error}</p>}
                 <button
                   type="submit"
-                  className="w-full rounded-full bg-primary py-3 text-sm font-bold text-primary-foreground shadow-soft transition hover:opacity-90"
+                  disabled={busy}
+                  className="w-full rounded-full bg-primary py-3 text-sm font-bold text-primary-foreground shadow-soft transition hover:opacity-90 disabled:opacity-60"
                 >
-                  Prijava
+                  {busy ? "Prijavljam ..." : "Prijava"}
                 </button>
               </form>
             </>

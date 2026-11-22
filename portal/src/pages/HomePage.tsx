@@ -9,7 +9,7 @@ export function HomePage() {
 
   return (
     <div>
-      <h1>CareCall</h1>
+      <h1>MojOdpust</h1>
       <p className={styles.tagline}>Daily check-ins for patients after discharge</p>
 
       <h2>Patients</h2>

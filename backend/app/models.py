@@ -80,6 +80,9 @@ class Call(Base):
     severity: Mapped[str] = mapped_column(default="normal")
     severity_reasons: Mapped[list] = mapped_column(JSON, default=list)
     critical_notified: Mapped[bool] = mapped_column(default=False)
+    # Stolpec "answers" iz prvotnega prototipa je v bazi obvezen (NOT NULL), zato ga
+    # vedno zapolnimo. Posamezni odgovori so v tabeli answers (relacija spodaj).
+    legacy_answers: Mapped[list] = mapped_column("answers", JSON, default=list)
 
     patient: Mapped[Patient] = relationship(back_populates="calls")
     answers: Mapped[list[Answer]] = relationship(

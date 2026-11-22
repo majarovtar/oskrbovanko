@@ -4,7 +4,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.models import Call
-from app.notify import send_critical_call_notice
+from app.notify import send_call_notice
 from app.schemas import AnswerOut, CallOut, QuestionRef, VitalsSummary
 from app.severity import assess_severity
 
@@ -27,19 +27,35 @@ def recompute_severity(call: Call) -> None:
 
 
 def reassess_and_notify(
-    db: Session, call: Call, patient_name: str, background_tasks: BackgroundTasks
+    db: Session,
+    call: Call,
+    patient_name: str,
+    background_tasks: BackgroundTasks,
+    *,
+    new_entry: bool = False,
 ) -> None:
+    """Recompute severity and email a notice.
+
+    `new_entry` fires a notice unconditionally (every new call is announced, with a
+    warning emoji when critical); without it, a notice only fires the first time this
+    call turns critical - e.g. when vitals attached later tip it over.
+    """
     recompute_severity(call)
     db.commit()
+
+    newly_critical = call.severity == "critical" and not call.critical_notified
     if call.severity == "critical" and not call.critical_notified:
         call.critical_notified = True
         db.commit()
+
+    if new_entry or newly_critical:
         background_tasks.add_task(
-            send_critical_call_notice,
+            send_call_notice,
             call_id=call.id,
             patient_id=call.patient_id,
             patient_name=patient_name,
             started_at=call.started_at,
+            severity=call.severity,
             severity_reasons=call.severity_reasons,
         )
 

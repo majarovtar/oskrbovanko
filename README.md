@@ -1,6 +1,6 @@
 # Oskrbovanko
 
-CareCall makes a daily AI check-in voice call to elderly patients after hospital discharge. The call is
+MojOdpust makes a daily AI check-in voice call to elderly patients after hospital discharge. The call is
 in Slovenian. The backend stores the answers, vitals and a severity for each call, and raises an alert
 when something is wrong.
 
