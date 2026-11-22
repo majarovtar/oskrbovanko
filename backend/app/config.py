@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     critical_call_email_to: str = ""
     critical_call_email_from: str = "onboarding@resend.dev"
 
+    infobip_api_key: str = ""
+    infobip_base_url: str = ""
+    infobip_application_id: str = ""
+    infobip_caller_number: str = ""
+    infobip_public_ws_base_url: str = ""
+
     spo2_min: int = 92
     pulse_min: int = 50
     pulse_max: int = 120

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run *)",
+      "Bash(ln -s ../.env .env)",
+      "Bash(DATABASE_URL=sqlite:// ADMIN_API_KEY=x SERVICE_API_KEY=svc-key JWT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx uv run python -c ' *)",
+      "Bash(curl -s http://127.0.0.1:8000/docs -o /dev/null -w \"%{http_code}\\\\n\")"
+    ]
+  }
+}

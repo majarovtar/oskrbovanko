@@ -16,6 +16,7 @@ dependencies = [
   "websockets>=13.0",
   "python-dotenv>=1.0",
   "resend>=2.5",
+  "infobip-api-python-client>=6.0.0",
 ]
 
 [dependency-groups]

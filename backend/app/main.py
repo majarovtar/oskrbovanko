@@ -17,6 +17,7 @@ from app.routers import (
     call_stream,
     calls,
     info,
+    infobip,
     patient_accounts,
     patients,
     questions,
@@ -54,3 +55,4 @@ app.include_router(patient_accounts.router)
 app.include_router(call_script.router)
 app.include_router(call_stream.router)
 app.include_router(call_page.router)
+app.include_router(infobip.router)
