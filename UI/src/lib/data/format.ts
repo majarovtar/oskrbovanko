@@ -1,0 +1,2 @@
+export const formatClinicalDate = (at: string) => new Date(at).toLocaleDateString("sl-SI", { timeZone: "Europe/Ljubljana", weekday: "short", day: "numeric", month: "short" });
+export const formatClinicalTime = (at: string) => new Date(at).toLocaleTimeString("sl-SI", { timeZone: "Europe/Ljubljana", hour: "2-digit", minute: "2-digit" });

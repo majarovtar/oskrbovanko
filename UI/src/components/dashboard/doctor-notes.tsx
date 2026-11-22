@@ -1,0 +1,25 @@
+import { useState } from "react";
+import { CheckCheck, NotebookPen, Plus, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { PatientRecord, MonitoringCall } from "@/lib/data/models";
+import { detailTimestamp, reviewStatusLabel } from "@/lib/data/patient-detail";
+
+export function DoctorNotes({ record, call, isDemo, pending, onNote, onReview, receipt, error }: {
+  record: PatientRecord; call: MonitoringCall | null; isDemo: boolean; pending: boolean;
+  onNote: (text: string, followUp: boolean) => Promise<void>; onReview: () => void;
+  receipt: string | null; error: string | null;
+}) {
+  const [text, setText] = useState("");
+  const [followUp, setFollowUp] = useState(false);
+  const summary = record.summaries.find((s) => s.callId === call?.id);
+  const reviewed = summary?.reviewStatus === "reviewed" && !record.alerts.some((a) => a.callId === call?.id && a.reviewStatus !== "reviewed");
+  const notes = [...record.notes].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return <section aria-labelledby="notes-heading" className="space-y-5 border-t pt-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="notes-heading" className="flex items-center gap-2 text-xl font-bold"><NotebookPen className="size-5 text-primary" />Zdravniške opombe in pregled</h2><Button variant={reviewed ? "secondary" : "default"} className="min-h-11" disabled={pending || !isDemo || !summary || reviewed} onClick={onReview}><CheckCheck />{reviewed ? "Pregledano" : "Označi kot pregledano (demo)"}</Button></div>
+    <p className="rounded-lg border border-warning/30 bg-accent px-4 py-3 text-sm text-accent-foreground">{isDemo ? "Demo spremembe veljajo le do ponovnega nalaganja strani. Opombe in pregledi niso trajno shranjeni. Pregled ne zapre kliničnih opozoril." : "Trajno shranjevanje trenutno ni povezano. Opomb in pregledov ni mogoče shraniti."}</p>
+    {summary && <p className="text-sm text-muted-foreground">Izbrano poročilo: <span className="font-semibold text-foreground">{reviewStatusLabel(summary.reviewStatus)}</span>{record.reviews.filter((r) => r.callId === call?.id && r.alertId === null).sort((a, b) => Date.parse(b.reviewedAt) - Date.parse(a.reviewedAt))[0]?.reviewedAt && ` · ${detailTimestamp(record.reviews.filter((r) => r.callId === call?.id && r.alertId === null).sort((a, b) => Date.parse(b.reviewedAt) - Date.parse(a.reviewedAt))[0]?.reviewedAt ?? summary.createdAt)}`}</p>}
+    <form className="space-y-3" onSubmit={async (event) => { event.preventDefault(); try { await onNote(text, followUp); setText(""); setFollowUp(false); } catch { /* The shared mutation displays the failure without a success message. */ } }}><label htmlFor="doctor-note" className="block text-sm font-bold">Nova opomba za izbrani klic</label><textarea id="doctor-note" required value={text} onChange={(e) => setText(e.target.value)} disabled={!isDemo || !call || pending} placeholder="Vnesite opombo za demo pacienta …" className="min-h-28 w-full resize-y rounded-lg border bg-card p-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60" /><div className="flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} disabled={!isDemo || pending} />Potreben nadaljnji pregled</label><Button type="submit" className="min-h-11" disabled={!isDemo || !call || !text.trim() || pending}><Plus />{pending ? "Obdelava …" : "Dodaj demo opombo"}</Button></div></form>
+    {error && <p role="alert" className="text-sm font-semibold text-destructive">{error}</p>}{receipt && !error && <p role="status" className="text-sm text-secondary-foreground">{receipt}</p>}
+    <div className="space-y-3" aria-label="Zgodovina zdravniških opomb">{notes.length === 0 ? <p className="py-4 text-sm text-muted-foreground">Zdravniških opomb še ni.</p> : notes.map((note) => <article key={note.id} className="rounded-lg border bg-card p-4"><div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span className="flex items-center gap-1.5 font-semibold"><UserRound className="size-3.5" />{record.relationships.find((r) => r.userId === note.authorUserId)?.contactName ?? "Zdravnik"}</span><time dateTime={note.createdAt}>{detailTimestamp(note.createdAt)}</time></div><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{note.text}</p><div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground"><span>Klic: {record.calls.find((c) => c.id === note.callId)?.scheduledAt ? detailTimestamp(record.calls.find((c) => c.id === note.callId)?.scheduledAt ?? note.createdAt) : "Ni na voljo"}</span>{note.followUpStatus === "requested" && <span className="font-semibold text-accent-foreground">Potreben nadaljnji pregled</span>}</div></article>)}</div>
+  </section>;
+}
