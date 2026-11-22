@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.calls_service import call_to_out, reassess_and_notify
 from app.db import get_db
@@ -101,5 +101,13 @@ def list_patient_calls(
     ensure_patient_access(principal, patient_id, db)
     if db.get(Patient, patient_id) is None:
         raise HTTPException(status_code=404, detail="not_found")
-    calls = db.query(Call).filter(Call.patient_id == patient_id).order_by(Call.started_at.desc()).all()
+    # Odgovore in meritve naložimo naenkrat (3 poizvedbe namesto 2 na vsak klic) - baza je
+    # oddaljena (~70 ms na poizvedbo), zato je bil seznam klicev pri več klicih zelo počasen.
+    calls = (
+        db.query(Call)
+        .options(selectinload(Call.answers), selectinload(Call.vitals_record))
+        .filter(Call.patient_id == patient_id)
+        .order_by(Call.started_at.desc())
+        .all()
+    )
     return [call_to_out(c) for c in calls]
