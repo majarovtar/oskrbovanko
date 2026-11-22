@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.models import Call
 from app.notify import send_call_notice
+from app.phone_answers import assess_answer
+from app.phone_call import QUESTIONS as PHONE_QUESTIONS
 from app.schemas import AnswerOut, CallOut, QuestionRef, VitalsSummary
 from app.severity import assess_severity
 
@@ -60,6 +62,16 @@ def reassess_and_notify(
         )
 
 
+def _answer_flag(answer) -> str | None:
+    """Shranjena oznaka; za odgovore iz telefonskega klica brez oznake (shranjene pred
+    uvedbo ocenjevanja) jo izračunamo ob branju, da so vsi klici obarvani enako."""
+    if answer.flag is not None:
+        return answer.flag
+    if answer.question_text in PHONE_QUESTIONS and isinstance(answer.value_json, str):
+        return assess_answer(PHONE_QUESTIONS.index(answer.question_text) + 1, answer.value_json)
+    return None
+
+
 def call_to_out(call: Call) -> CallOut:
     vitals = call.vitals_record
     return CallOut(
@@ -67,7 +79,7 @@ def call_to_out(call: Call) -> CallOut:
         patient_id=call.patient_id,
         started_at=call.started_at,
         answers=[
-            AnswerOut(question=QuestionRef(text=a.question_text), value=a.value_json, flag=a.flag)
+            AnswerOut(question=QuestionRef(text=a.question_text), value=a.value_json, flag=_answer_flag(a))
             for a in call.answers
         ],
         closing_answer=call.closing_answer,

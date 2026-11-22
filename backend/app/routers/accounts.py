@@ -25,6 +25,7 @@ def create_account(body: AccountIn, db: Session = Depends(get_db)) -> AccountOut
         password_hash=hash_password(body.password),
         name=body.name,
         role=body.role,
+        phone_number=body.phone_number,
     )
     db.add(account)
     try:

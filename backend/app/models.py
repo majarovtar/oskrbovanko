@@ -113,6 +113,8 @@ class Account(Base):
     password_hash: Mapped[str]
     name: Mapped[str]
     role: Mapped[str]
+    # Telefon za nujna obvestila (skrbnika pokličemo, ko je klic pacienta nujen). Neobvezno.
+    phone_number: Mapped[str | None] = mapped_column(default=None)
 
     patients: Mapped[list[PatientAccount]] = relationship(
         back_populates="account", cascade="all, delete-orphan"

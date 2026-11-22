@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -14,11 +15,13 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from app import phone_call
-from app.calls_service import reassess_and_notify
+from app.calls_service import recompute_severity
 from app.config import settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.deps import Principal, ensure_doctor_or_admin, ensure_patient_access, get_principal
-from app.models import Answer, Call, Patient
+from app.models import Account, Answer, Call, Patient, PatientAccount
+from app.notify import send_call_notice
+from app.phone_answers import assess_answer
 
 logger = logging.getLogger("app.routers.phone_call")
 router = APIRouter(tags=["phone-call"])
@@ -26,6 +29,10 @@ router = APIRouter(tags=["phone-call"])
 # Twilio Call SID -> id vrstice v tabeli calls (klic se ustvari ob prvem odgovoru)
 _call_rows: dict[str, uuid.UUID] = {}
 _call_rows_lock = threading.Lock()
+
+# Klici skrbnikom (nujno obvestilo), ki jih je sprožil backend.
+_guardian_calls: set[str] = set()
+GUARDIAN_CALL_DELAY_S = 8  # premor po koncu klica s pacientom, preden pokličemo skrbnika
 
 # Klici, ki jih je sprožil backend: Call SID -> (pacient, čas začetka).
 # Brez podpisa (trial račun) sprejmemo Twiliove zahteve samo za te klice.
@@ -141,8 +148,12 @@ async def answer(
     st: int,
     rep: int,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
 ) -> Response:
+    """Twilio pošlje odgovor; takoj vrnemo naslednje vprašanje, shranjevanje teče v ozadju.
+
+    Baza (skupni Supabase) je lahko počasna; če bi Twilio čakal nanjo, bi po ~15 s klic
+    prekinil ("could not reach your URL"). Zato ta pot baze sploh ne uporablja.
+    """
     form = await _twilio_form(request, patient_id)
     base = _base()
     if not 1 <= st <= len(phone_call.QUESTIONS):
@@ -154,13 +165,7 @@ async def answer(
         return _twiml(phone_call.question_twiml(base, str(patient_id), st, repeat=True))
 
     last = st == len(phone_call.QUESTIONS)
-    try:
-        _save_answer(db, background_tasks, form.get("CallSid", ""), patient_id, st, text, last)
-        logger.info("call %s answer %s: %r", form.get("CallSid"), st, text)
-    except Exception:
-        # Klic naj teče naprej tudi, če baza za trenutek ni dosegljiva; napako zabeležimo.
-        db.rollback()
-        logger.exception("saving answer %s of call %s failed", st, form.get("CallSid"))
+    background_tasks.add_task(_save_answer_in_background, form.get("CallSid", ""), patient_id, st, text, last)
 
     if last:
         return _twiml(phone_call.goodbye_twiml(base))
@@ -168,9 +173,25 @@ async def answer(
 
 
 # ------------------------------------------------------------------ shranjevanje
+# Odgovore istega klica shranjujemo enega za drugim (vrstni red in en sam zapis klica).
+_save_lock = threading.Lock()
+
+
+def _save_answer_in_background(call_sid: str, patient_id: uuid.UUID, number: int, text: str, last: bool) -> None:
+    with _save_lock:
+        db = SessionLocal()
+        try:
+            _save_answer(db, call_sid, patient_id, number, text, last)
+            logger.info("call %s answer %s: %r", call_sid, number, text)
+        except Exception:
+            db.rollback()
+            logger.exception("saving answer %s of call %s failed", number, call_sid)
+        finally:
+            db.close()
+
+
 def _save_answer(
     db: Session,
-    background_tasks: BackgroundTasks,
     call_sid: str,
     patient_id: uuid.UUID,
     number: int,
@@ -183,25 +204,31 @@ def _save_answer(
 
     with _call_rows_lock:
         call_id = _call_rows.get(call_sid)
-        call = db.get(Call, call_id) if call_id else None
-        if call is None:
-            call = Call(
-                patient_id=patient_id,
-                started_at=datetime.now(UTC),
-                closing_answer="",
-                transcript="",
-                legacy_answers=[],
-            )
-            db.add(call)
-            db.flush()
+    call = db.get(Call, call_id) if call_id else None
+    if call is None:
+        call = Call(
+            patient_id=patient_id,
+            started_at=datetime.now(UTC),
+            closing_answer="",
+            transcript="",
+            legacy_answers=[],
+        )
+        db.add(call)
+        db.flush()
+        with _call_rows_lock:
             _call_rows[call_sid] = call.id
+        # Ob prvem odgovoru začnemo spremljati klic: ko se konča (tudi predčasno),
+        # preverimo, ali je nujen (e-pošta zdravniku, klic skrbniku).
+        threading.Thread(target=_after_call, args=(call.id, call_sid), daemon=True).start()
 
+    flag = assess_answer(number, text)  # rdeče/oranžno/rumeno: kaj je lahko narobe
     existing = db.query(Answer).filter(Answer.call_id == call.id, Answer.position == number).first()
     if existing is None:
         db.add(Answer(call_id=call.id, position=number, question_text=phone_call.QUESTIONS[number - 1],
-                      answer_type="free_text", value_json=text or None, flag=None))
+                      answer_type="free_text", value_json=text or None, flag=flag))
     else:
         existing.value_json = text or None
+        existing.flag = flag
 
     entries = [e for e in (call.legacy_answers or []) if e.get("position") != number]
     entries.append({"position": number, "question": phone_call.QUESTIONS[number - 1],
@@ -214,8 +241,90 @@ def _save_answer(
         call.closing_answer = text
     db.commit()
 
-    if last:
-        db.refresh(call)
-        reassess_and_notify(db, call, patient.name, background_tasks, new_entry=True)
+
+# ------------------------------------------------------------------ po klicu
+def _after_call(call_id: uuid.UUID, call_sid: str) -> None:
+    """Počaka, da se klic pacienta konča. Če je nujen: e-pošta zdravniku in klic skrbniku.
+
+    Nenujni klici ne sprožijo ničesar (zdravnik jih vidi v portalu).
+    """
+    status = phone_call.wait_until_call_ended(call_sid)
+    logger.info("call %s ended (%s), checking severity", call_sid, status)
+    time.sleep(2)  # da se v ozadju shrani še zadnji odgovor
+    with _save_lock:  # počakamo, da se vsi odgovori shranijo
+        pass
+    with _call_rows_lock:
+        _call_rows.pop(call_sid, None)
+    db = SessionLocal()
+    try:
+        call = db.get(Call, call_id)
+        if call is None:
+            return
+        patient = db.get(Patient, call.patient_id)
+        assert patient is not None
+        recompute_severity(call)
+        db.commit()
+        if call.severity != "critical":
+            logger.info("call %s is %s - no email, no guardian call", call_sid, call.severity)
+            return
+
+        if not call.critical_notified:
+            call.critical_notified = True
+            db.commit()
+            asyncio.run(send_call_notice(
+                call_id=call.id, patient_id=call.patient_id, patient_name=patient.name,
+                started_at=call.started_at, severity=call.severity, severity_reasons=call.severity_reasons,
+            ))
+            logger.info("critical call %s: email sent to doctor", call_sid)
+
+        # Skrbnik ima lahko isto številko kot pacient: počakamo, da se linija sprosti.
+        time.sleep(GUARDIAN_CALL_DELAY_S)
+        _call_guardians(db, call, patient)
+    except Exception:
+        logger.exception("after-call handling for %s failed", call_sid)
+    finally:
+        db.close()
+
+
+def _call_guardians(db: Session, call: Call, patient: Patient) -> None:
+    """Pokliče vse skrbnike pacienta, ki imajo vpisan telefon, in jim pove, kaj je narobe."""
+    guardians = (
+        db.query(Account)
+        .join(PatientAccount, PatientAccount.account_id == Account.id)
+        .filter(PatientAccount.patient_id == patient.id, Account.role == "caregiver",
+                Account.phone_number.is_not(None))
+        .all()
+    )
+    if not guardians:
+        logger.info("no guardian with a phone number for patient %s", patient.id)
+        return
+    phone_call.synthesize(phone_call.GUARDIAN_MESSAGE)
+    base = phone_call.current_base_url()
+    if base is None:
+        logger.warning("no public URL - cannot call guardians")
+        return
+    for guardian in guardians:
+        try:
+            sid = phone_call.start_call(guardian.phone_number or "", f"{base}/twilio/guardian")
+            with _call_rows_lock:
+                _guardian_calls.add(sid)
+            logger.info("calling guardian %s about critical call (%s)", guardian.id, sid)
+        except RuntimeError as exc:
+            logger.warning("calling guardian %s failed: %s", guardian.id, exc)
+
+
+@router.post("/twilio/guardian", include_in_schema=False)
+async def guardian_message(request: Request) -> Response:
+    """Twilio vpraša, kaj naj pove skrbniku: stalno sporočilo, da je oskrbovanec morda v težavah."""
+    raw = (await request.body()).decode("utf-8")
+    form = {key: values[0] for key, values in parse_qs(raw, keep_blank_values=True).items()}
+    signature = request.headers.get("X-Twilio-Signature")
+    if signature:
+        allowed = phone_call.valid_signature(f"{_base()}{request.url.path}", form, signature)
+    else:  # trial račun: brez podpisa sprejmemo samo klic skrbniku, ki smo ga sami začeli
         with _call_rows_lock:
-            _call_rows.pop(call_sid, None)
+            started_by_us = form.get("CallSid", "") in _guardian_calls
+        allowed = form.get("AccountSid") == settings.twilio_account_sid and started_by_us
+    if not allowed:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return _twiml(phone_call.guardian_twiml(_base()))

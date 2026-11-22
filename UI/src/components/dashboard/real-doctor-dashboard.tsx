@@ -2,17 +2,18 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, CalendarCheck2, HeartPulse, LogOut, PhoneCall, RefreshCw, Users } from "lucide-react";
 import { CallButton } from "@/components/dashboard/call-button";
-import { logout } from "@/lib/api";
+import { reasonLabels } from "@/components/dashboard/call-report";
+import { API_URL, logout } from "@/lib/api";
 
 // Development-only bridge to the existing FastAPI API. The real login will replace
 // sessionStorage with an authenticated session; never put a service/admin key here.
-const API_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// API_URL pride iz @/lib/api (enaka nastavitev VITE_API_BASE_URL za ves UI).
 const TOKEN_KEY = "oskrbovem_dev_bearer";
 
 type Patient = { id: string; name: string; phone_number: string; call_time: string; consent: boolean };
-type Call = { id: string; patient_id: string; started_at: string; transcript?: string; closing_answer?: string; severity?: string; severity_reasons?: string[] };
+type Call = { id: string; patient_id: string; started_at: string; transcript?: string; closing_answer?: string; severity?: string; severity_reasons?: string[]; answers?: { question: { text: string }; value: unknown; flag: string | null }[] };
 type Vitals = { id: string; patient_id: string; pulse: number; spo2: number; measured_at: string };
-type PatientData = { patient: Patient; calls: Call[]; vitals: Vitals[]; error?: string };
+type PatientData = { patient: Patient; calls: Call[]; vitals: Vitals[]; error?: string | undefined };
 
 async function getJson<T>(path: string, token: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -84,7 +85,7 @@ export function RealDoctorDashboard() {
   }, [refresh]);
 
   const getLastCall = (row: PatientData) => latest(row.calls, (c) => c.started_at);
-  const critical = rows.filter((r) => getLastCall(r)?.severity === "critical");
+  const critical = rows.filter((r) => { const c = getLastCall(r); return c?.severity === "critical" || Boolean(c?.answers?.some((a) => a.flag === "high")); });
   const callCount = rows.reduce((count, r) => count + r.calls.filter((c) => {
     if (!c.started_at) return false;
     const d = new Date(c.started_at);
@@ -96,7 +97,6 @@ export function RealDoctorDashboard() {
       <div><h1 className="text-3xl font-bold">Pregled pacientov</h1><p className="mt-1 text-sm text-muted-foreground">Podatki iz zalednega sistema · lokalni razvoj</p></div>
       <div className="flex gap-2">
         <button type="button" onClick={() => setRefresh((n) => n + 1)} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><RefreshCw className="size-4" /> Osveži</button>
-        <button type="button" onClick={() => { logout(); navigate({ to: "/auth" }); }} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><LogOut className="size-4" /> Odjava</button>
       </div>
     </header>
     {!hasToken && !loading && <section className="rounded-xl border bg-card p-5"><p className="font-semibold">Niste prijavljeni.</p><p className="mt-1 text-sm text-muted-foreground">Prijavite se z zdravniškim računom, da vidite svoje paciente.</p><Link to="/auth" className="mt-3 inline-flex items-center gap-2 font-semibold text-primary">Prijava <ArrowRight className="size-4" /></Link></section>}
@@ -109,7 +109,7 @@ export function RealDoctorDashboard() {
         <Metric title="Današnji shranjeni klici" value={callCount} icon={PhoneCall} />
         <Metric title="Pacienti z meritvami" value={rows.filter((r) => r.vitals.length > 0).length} icon={HeartPulse} />
       </section>
-      {critical.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-xl font-bold"><AlertTriangle className="size-5 text-destructive" /> Kritična opozorila iz klicev</h2>{critical.map((r) => <div key={r.patient.id} className="rounded-xl border border-l-4 border-l-destructive bg-card p-4"><p className="font-bold">{r.patient.name}</p><p className="mt-1 text-sm">{getLastCall(r)?.severity_reasons?.join(" · ") || "Zadnji klic ima oznako kritično."}</p></div>)}</section>}
+      {critical.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-xl font-bold"><AlertTriangle className="size-5 text-destructive" /> Kritična opozorila iz klicev</h2>{critical.map((r) => <div key={r.patient.id} className="rounded-xl border border-l-4 border-l-destructive bg-card p-4"><p className="font-bold">{r.patient.name}</p><ul className="mt-1 space-y-0.5 text-sm">{(getLastCall(r)?.answers ?? []).filter((a) => a.flag === "high").map((a) => <li key={a.question.text}><span className="text-muted-foreground">{a.question.text}</span> <span className="font-semibold">»{String(a.value ?? "ni odgovora")}«</span></li>)}</ul>{!(getLastCall(r)?.answers ?? []).some((a) => a.flag === "high") && <p className="mt-1 text-sm">{reasonLabels(getLastCall(r)?.severity_reasons).join(" · ") || "Zadnji klic je označen kot nujen."}</p>}</div>)}</section>}
       <section className="space-y-3"><h2 className="text-xl font-bold">Pacienti</h2>
         {rows.length === 0 ? <p className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">Za ta testni račun ni povezanih pacientov.</p> :
           <div className="space-y-3">{rows.map((r) => {
@@ -118,7 +118,12 @@ export function RealDoctorDashboard() {
             return <article key={r.patient.id} className="rounded-xl border bg-card p-4 shadow-soft">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div><h3 className="text-lg font-bold">{r.patient.name}</h3><p className="text-sm text-muted-foreground">Dnevni klic: {r.patient.call_time || "Ni določeno"}</p></div>
-                {call?.severity === "critical" ? <span className="rounded-full bg-critical-soft px-3 py-1 text-xs font-bold text-destructive">Kritično</span> : <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold">{call ? "Zadnji klic shranjen" : "Še ni klicev"}</span>}
+                {(() => {
+                  const flagged = call?.answers?.filter((a) => a.flag).length ?? 0;
+                  if (call?.severity === "critical") return <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800">Nujno</span>;
+                  if (flagged) return <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">Za preverit ({flagged})</span>;
+                  return <span className={call ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800" : "rounded-full bg-muted px-3 py-1 text-xs font-semibold"}>{call ? "Brez težav" : "Še ni klicev"}</span>;
+                })()}
               </div>
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
                 <div><p className="text-xs text-muted-foreground">Zadnji klic</p><p>{formattedTime(call?.started_at)}</p></div>

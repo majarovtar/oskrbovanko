@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, HeartPulse, Lock, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { login, logout } from "@/lib/api";
+import { HOME_BY_ROLE, isRole, login, logout } from "@/lib/api";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -39,16 +39,16 @@ function AuthPage() {
       setSent(true);
       return;
     }
-    // Prava prijava prek FastAPI (/auth/login); zdravnik gre na seznam svojih pacientov.
+    // Prava prijava prek FastAPI (/auth/login); vsaka vloga gre na svojo domačo stran.
     setError("");
     setBusy(true);
     try {
       const account = await login(email.trim(), password);
-      if (account.role === "doctor") {
-        navigate({ to: "/zdravnik" });
+      if (isRole(account.role)) {
+        navigate({ to: HOME_BY_ROLE[account.role] });   // zdravnik, skrbnik ali pacient
       } else {
         logout();
-        setError("Ta račun ni zdravniški. Portal je zaenkrat na voljo samo zdravnikom.");
+        setError("Ta račun nima dostopa do portala.");
       }
     } catch (err) {
       const status = (err as { status?: number }).status;

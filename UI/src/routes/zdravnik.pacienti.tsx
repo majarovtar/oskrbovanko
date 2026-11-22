@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { LogOut, Phone, RefreshCw } from "lucide-react";
 import { pageHead } from "@/lib/page-head";
-import { logout, startPhoneCall } from "@/lib/api";
+import { API_URL, logout, startPhoneCall } from "@/lib/api";
 
 type CallButtonState = { status: "calling" | "started" | "error"; message: string };
 
@@ -28,7 +28,6 @@ type ApiCall = {
   vitals: { pulse: number; spo2: number; measured_at: string } | null;
 };
 
-const API_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const TOKEN_KEY = "oskrbovem_dev_bearer";
 const dateTime = (date: string) => {
   const parsed = new Date(date);
@@ -38,7 +37,7 @@ const dateTime = (date: string) => {
 async function getJson<T>(path: string, token: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
-    signal,
+    signal: signal ?? null,
   });
   if (!response.ok) {
     if (response.status === 401) throw new Error("Neveljaven ali potekel žeton (401).");
@@ -128,23 +127,17 @@ function PatientResults({ patient, token }: { patient: ApiPatient; token: string
 
 function RealPatientsPage() {
   const [token, setToken] = useState("");
-  const [input, setInput] = useState("");
   const [patients, setPatients] = useState<ApiPatient[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
   const [callState, setCallState] = useState<Record<string, CallButtonState>>({});
   const navigate = useNavigate();
 
+  // Žeton prijavljenega zdravnika (stran /zdravnik že preveri prijavo).
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      const saved = sessionStorage.getItem(TOKEN_KEY) ?? "";
-      setToken(saved);
-      setInput(saved);
-    }
-    setChecked(true);
+    setToken(sessionStorage.getItem(TOKEN_KEY) ?? "");
   }, []);
 
   async function callPatient(patient: ApiPatient) {
@@ -169,7 +162,7 @@ function RealPatientsPage() {
   }
 
   useEffect(() => {
-    if (!token || !import.meta.env.DEV) return;
+    if (!token) return;
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -184,44 +177,21 @@ function RealPatientsPage() {
     return () => controller.abort();
   }, [token, refreshKey]);
 
-  function loadPatients() {
-    const value = input.trim().replace(/^Bearer\s+/i, "");
-    sessionStorage.setItem(TOKEN_KEY, value);
-    setToken(value);
-    setSelectedId(null);
-    setRefreshKey((previous) => previous + 1);
-    if (!value) { setPatients([]); setError("Vnesite testni JWT žeton."); }
-  }
-
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold">Pacienti</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Podatki iz pravega zalednega sistema · samo razvojno okolje</p>
+          <p className="mt-1 text-sm text-muted-foreground">Vaši pacienti, njihovi klici in meritve</p>
         </div>
         {token && (
           <div className="flex gap-2">
             <button type="button" onClick={() => setRefreshKey((n) => n + 1)} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><RefreshCw className="size-4" /> Osveži</button>
-            <button type="button" onClick={signOut} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><LogOut className="size-4" /> Odjava</button>
           </div>
         )}
       </header>
-      {!import.meta.env.DEV ? <p role="alert" className="rounded-xl border bg-card p-4">Povezava je trenutno omogočena le za lokalni razvoj. Prijavo bomo povezali pozneje.</p> : (
+      {(
         <>
-          {checked && !token && (
-            <section className="space-y-3 rounded-xl border bg-card p-4">
-              <p className="font-semibold">Niste prijavljeni.</p>
-              <Link to="/auth" className="inline-block rounded-lg bg-primary px-5 py-2 font-semibold text-primary-foreground">Prijava za zdravnike</Link>
-              <details className="text-sm text-muted-foreground">
-                <summary className="cursor-pointer">Razvojni dostop z JWT</summary>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <input aria-label="Testni JWT" type="password" autoComplete="off" placeholder="Testni JWT (access_token)" className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2" value={input} onChange={(e) => setInput(e.target.value)} />
-                  <button type="button" className="rounded-lg border px-4 py-2" onClick={loadPatients}>Naloži paciente</button>
-                </div>
-              </details>
-            </section>
-          )}
           {loading && <p role="status">Nalagam paciente ...</p>}
           {error && <p role="alert" className="rounded-xl border border-destructive bg-card p-4 text-destructive">{error}</p>}
           {!loading && token && !error && (

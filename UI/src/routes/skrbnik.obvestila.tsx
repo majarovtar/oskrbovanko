@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PhasePlaceholder } from "@/components/dashboard/layouts";
-import { pageHead } from "@/lib/page-head";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+// Skrbnik ima vse na eni strani; stare povezave preusmerimo tja.
 export const Route = createFileRoute("/skrbnik/obvestila")({
-  head: () => pageHead("Obvestila · Skrbnik", "Obvestila: predstavitvena stran za vlogo skrbnik v oskrbaVEM."),
-  component: PlaceholderPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/skrbnik" });
+  },
 });
-function PlaceholderPage() { return <PhasePlaceholder title="Obvestila" />; }

@@ -15,11 +15,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import io
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
+import tarfile
 import threading
 import time
 from pathlib import Path
@@ -48,6 +51,10 @@ INTRO = ("Dober dan. Tukaj avtomatska asistentka. Kličem zaradi pregleda po ope
 REPEAT = "Oprostite, nisem vas slišala."
 GOODBYE = ("Hvala za odgovore. Posredovali jih bomo zdravniku. "
            "V nujnem primeru pokličite sto dvanajst. Na svidenje.")
+# Klic skrbniku, ko je klic pacienta nujen (predvaja se dvakrat).
+GUARDIAN_MESSAGE = ("Pozdravljeni, tukaj avtomatska asistentka. Vaš oskrbovanec je morda v težavah. "
+                    "Prosimo, čim prej ga preverite. Zdravnik je že obveščen. "
+                    "Če je nujno, pokličite sto dvanajst.")
 
 LANGUAGE = "sl-SI"
 WAIT_FOR_ANSWER_S = 6   # koliko sekund čaka, da pacient začne govoriti
@@ -73,9 +80,13 @@ def audio_path(name: str) -> Path | None:
     return path if path.exists() else None
 
 
-def prepare_audio() -> None:
-    """Vsa besedila enkrat pretvori v govor (8 kHz WAV za telefon); obstoječa preskoči."""
+def synthesize(text: str) -> str:
+    """Besedilo pretvori v govor (8 kHz WAV za telefon), če ga še ni; vrne ime datoteke."""
     TTS_DIR.mkdir(exist_ok=True)
+    name = audio_name(text)
+    path = TTS_DIR / name
+    if path.exists():
+        return name
     resource = httpx.URL(settings.azure_voicelive_endpoint).host.split(".")[0]
     url = f"https://{resource}.cognitiveservices.azure.com/tts/cognitiveservices/v1"
     headers = {
@@ -84,16 +95,45 @@ def prepare_audio() -> None:
         "X-Microsoft-OutputFormat": "riff-8khz-16bit-mono-pcm",
         "User-Agent": "mojodpust-backend",
     }
-    for text in [INTRO, REPEAT, GOODBYE, *QUESTIONS]:
-        path = TTS_DIR / audio_name(text)
-        if path.exists():
-            continue
-        ssml = (f'<speak version="1.0" xml:lang="{LANGUAGE}"><voice name="{settings.tts_voice}">'
-                f'<prosody rate="-10%">{escape(text)}</prosody></voice></speak>')
-        response = httpx.post(url, headers=headers, content=ssml.encode("utf-8"), timeout=30)
-        if response.status_code != 200:
-            raise RuntimeError(f"Azure TTS failed ({response.status_code})")
-        path.write_bytes(response.content)
+    ssml = (f'<speak version="1.0" xml:lang="{LANGUAGE}"><voice name="{settings.tts_voice}">'
+            f'<prosody rate="-10%">{escape(text)}</prosody></voice></speak>')
+    response = httpx.post(url, headers=headers, content=ssml.encode("utf-8"), timeout=30)
+    if response.status_code != 200:
+        raise RuntimeError(f"Azure TTS failed ({response.status_code})")
+    path.write_bytes(response.content)
+    return name
+
+
+def prepare_audio() -> None:
+    """Vsa stalna besedila klica enkrat pretvori v govor; obstoječa preskoči."""
+    for text in [INTRO, REPEAT, GOODBYE, GUARDIAN_MESSAGE, *QUESTIONS]:
+        synthesize(text)
+
+
+# ------------------------------------------------------------------ klic skrbniku (nujno)
+def guardian_twiml(base: str) -> str:
+    """Stalno sporočilo skrbniku predvajamo dvakrat, nato klic končamo."""
+    play = _play(base, GUARDIAN_MESSAGE)
+    return f'<Response><Pause length="1"/>{play}{play}<Hangup/></Response>'
+
+
+def call_status(call_sid: str) -> str:
+    sid = settings.twilio_account_sid
+    response = httpx.get(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls/{call_sid}.json",
+                         auth=(sid, settings.twilio_auth_token), timeout=30)
+    return response.json().get("status", "unknown") if response.status_code < 300 else "unknown"
+
+
+def wait_until_call_ended(call_sid: str, timeout_s: int = 180) -> str:
+    """Počaka, da se klic konča (Twilio status); vrne končni status."""
+    deadline = time.monotonic() + timeout_s
+    status = "unknown"
+    while time.monotonic() < deadline:
+        status = call_status(call_sid)
+        if status in ("completed", "busy", "failed", "no-answer", "canceled"):
+            return status
+        time.sleep(3)
+    return status
 
 
 # ------------------------------------------------------------------ javni naslov (tunel)
@@ -103,17 +143,79 @@ _tunnel: subprocess.Popen | None = None
 _tunnel_url: str | None = None
 
 
+TOOLS_DIR = Path(__file__).resolve().parent.parent / ".tools"
+_CLOUDFLARED_RELEASE = "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+
+
+def _cloudflared_asset() -> str:
+    """Ime datoteke iz Cloudflare izdaje za ta računalnik."""
+    system = platform.system()
+    machine = platform.machine().lower()
+    arm = machine in ("arm64", "aarch64")
+    if system == "Windows":
+        return "cloudflared-windows-amd64.exe" if machine in ("amd64", "x86_64", "arm64") else "cloudflared-windows-386.exe"
+    if system == "Darwin":
+        return "cloudflared-darwin-arm64.tgz" if arm else "cloudflared-darwin-amd64.tgz"
+    if system == "Linux":
+        return "cloudflared-linux-arm64" if arm else "cloudflared-linux-amd64"
+    raise RuntimeError(f"cloudflared za {system}/{machine} ni na voljo")
+
+
+def _download_cloudflared() -> Path:
+    """Prenese uradni cloudflared z GitHuba (Cloudflare) in preveri objavljeni SHA256.
+
+    Shrani ga v backend/.tools/ (v .gitignore), zato ga ni treba nameščati ročno.
+    """
+    asset = _cloudflared_asset()
+    target = TOOLS_DIR / ("cloudflared.exe" if platform.system() == "Windows" else "cloudflared")
+    if target.exists():
+        return target
+    logger.info("cloudflared not installed - downloading %s from the official release", asset)
+    headers = {"User-Agent": "mojodpust-backend", "Accept": "application/vnd.github+json"}
+    release = httpx.get(_CLOUDFLARED_RELEASE, headers=headers, timeout=30).json()
+    url = next((a["browser_download_url"] for a in release.get("assets", []) if a.get("name") == asset), None)
+    expected = re.search(re.escape(asset) + r"\s*:\s*([0-9a-f]{64})", release.get("body") or "")
+    if not url or not expected:
+        raise RuntimeError(f"cloudflared {asset} ali njegov checksum ni v izdaji")
+    data = httpx.get(url, headers={"User-Agent": "mojodpust-backend"}, follow_redirects=True, timeout=180).content
+    if hashlib.sha256(data).hexdigest() != expected.group(1):
+        raise RuntimeError("preneseni cloudflared se ne ujema z uradnim checksumom - ne zaganjam ga")
+
+    TOOLS_DIR.mkdir(exist_ok=True)
+    if asset.endswith(".tgz"):
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+            member = next(m for m in archive.getmembers() if Path(m.name).name == "cloudflared" and m.isfile())
+            extracted = archive.extractfile(member)
+            assert extracted is not None
+            data = extracted.read()
+    temporary = target.with_suffix(".download")
+    temporary.write_bytes(data)
+    temporary.chmod(0o755)
+    temporary.replace(target)
+    logger.info("cloudflared %s downloaded to %s", release.get("tag_name"), target)
+    return target
+
+
 def _find_cloudflared() -> str:
     candidates = [
         shutil.which("cloudflared"),
         r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
         r"C:\Program Files\cloudflared\cloudflared.exe",
         str(Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / "cloudflared.exe"),
+        str(TOOLS_DIR / "cloudflared.exe"),
+        str(TOOLS_DIR / "cloudflared"),
     ]
     for path in candidates:
         if path and Path(path).exists():
             return path
-    raise RuntimeError("cloudflared ni nameščen (winget install --id Cloudflare.cloudflared)")
+    # Ni nameščen: prenesemo ga sami (enkrat), da ga ni treba nameščati ročno.
+    try:
+        return str(_download_cloudflared())
+    except (httpx.HTTPError, OSError, RuntimeError, StopIteration) as exc:
+        raise RuntimeError(
+            f"cloudflared ni nameščen in ga ni bilo mogoče prenesti ({exc}). "
+            "Namestite ga z: winget install --id Cloudflare.cloudflared"
+        ) from exc
 
 
 def public_base_url(local_port: int) -> str:

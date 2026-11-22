@@ -102,6 +102,7 @@ class AccountIn(BaseModel):
     password: str
     name: str
     role: str
+    phone_number: str | None = None
 
 
 class AccountOut(BaseModel):
