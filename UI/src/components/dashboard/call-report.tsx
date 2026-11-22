@@ -164,6 +164,13 @@ export function CallReport({ call, showTranscript = false }: { call: ApiCall; sh
         </div>
       </div>
 
+      {call.vitals && (
+        <section className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Utrip med klicem</p><p className="text-xl font-bold">{call.vitals.pulse} <span className="text-sm font-normal">/min</span></p></div>
+          <div className="rounded-lg border bg-muted/40 p-3"><p className="text-xs text-muted-foreground">SpO₂ med klicem</p><p className="text-xl font-bold">{call.vitals.spo2} <span className="text-sm font-normal">%</span></p></div>
+        </section>
+      )}
+
       {flagged.length > 0 && (
         <section className="space-y-2">
           <h3 className="font-semibold">Kaj je lahko narobe</h3>
