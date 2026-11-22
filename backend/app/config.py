@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     voicelive_voice: str = "sl-SI-PetraNeural"
     voicelive_api_version: str = "2026-04-10"
 
-    cors_origins: str = "http://localhost:5173"
+    # 5173 = portal, 8080/3000 = UI (Lovable/TanStack Start dev strežnik)
+    cors_origins: str = "http://localhost:5173,http://localhost:8080,http://localhost:3000"
 
     resend_api_key: str = ""
     critical_call_email_to: str = ""
@@ -28,6 +29,16 @@ class Settings(BaseSettings):
     pulse_max: int = 120
 
     answer_wait_ms: int = 1000
+
+    # Telefonski klic prek Twilio (gumb "Pokliči" v portalu).
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    # Javni naslov backenda, ki ga doseže Twilio. Če je prazen, backend sam zažene
+    # cloudflared tunel ob prvem klicu.
+    public_base_url: str = ""
+    backend_port: int = 8000   # port, na katerem teče uvicorn (tunel kaže sem)
+    tts_voice: str = "sl-SI-PetraNeural"
 
     @property
     def cors_origin_list(self) -> list[str]:

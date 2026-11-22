@@ -1,7 +1,7 @@
 [project]
-name = "carecall-backend"
+name = "mojodpust-backend"
 version = "0.1.0"
-description = "CareCall backend - daily AI check-in calls to discharged patients, their vitals, summaries and alerts."
+description = "MojOdpust backend - daily AI check-in calls to discharged patients, their vitals, summaries and alerts."
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",

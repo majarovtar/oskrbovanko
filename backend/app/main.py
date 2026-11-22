@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import init_db
 from app.logging_config import configure_logging
+from app.phone_call import start_tunnel_in_background, stop_tunnel
 from app.routers import (
     accounts,
     auth,
@@ -19,6 +20,7 @@ from app.routers import (
     info,
     patient_accounts,
     patients,
+    phone_call,
     questions,
     vitals,
 )
@@ -29,10 +31,12 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    start_tunnel_in_background(settings.backend_port)
     yield
+    stop_tunnel()
 
 
-app = FastAPI(title="CareCall", lifespan=lifespan)
+app = FastAPI(title="MojOdpust", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,3 +58,4 @@ app.include_router(patient_accounts.router)
 app.include_router(call_script.router)
 app.include_router(call_stream.router)
 app.include_router(call_page.router)
+app.include_router(phone_call.router)

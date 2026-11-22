@@ -1,6 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, CalendarCheck2, HeartPulse, PhoneCall, RefreshCw, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarCheck2, HeartPulse, LogOut, PhoneCall, RefreshCw, Users } from "lucide-react";
+import { CallButton } from "@/components/dashboard/call-button";
+import { logout } from "@/lib/api";
 
 // Development-only bridge to the existing FastAPI API. The real login will replace
 // sessionStorage with an authenticated session; never put a service/admin key here.
@@ -43,6 +45,7 @@ function Metric({ title, value, icon: Icon }: { title: string; value: string | n
 }
 
 export function RealDoctorDashboard() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<PatientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,9 +94,12 @@ export function RealDoctorDashboard() {
   return <div className="space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-3xl font-bold">Pregled pacientov</h1><p className="mt-1 text-sm text-muted-foreground">Podatki iz zalednega sistema · lokalni razvoj</p></div>
-      <button type="button" onClick={() => setRefresh((n) => n + 1)} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><RefreshCw className="size-4" /> Osveži</button>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setRefresh((n) => n + 1)} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><RefreshCw className="size-4" /> Osveži</button>
+        <button type="button" onClick={() => { logout(); navigate({ to: "/auth" }); }} className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm hover:bg-muted"><LogOut className="size-4" /> Odjava</button>
+      </div>
     </header>
-    {!hasToken && !loading && <section className="rounded-xl border bg-card p-5"><p className="font-semibold">Najprej povežite testni račun.</p><p className="mt-1 text-sm text-muted-foreground">Na strani Pacienti vnesite testni JWT in kliknite »Naloži paciente«. Nato se vrnite na Pregled.</p><Link to="/zdravnik/pacienti" className="mt-3 inline-flex items-center gap-2 font-semibold text-primary">Odpri paciente <ArrowRight className="size-4" /></Link></section>}
+    {!hasToken && !loading && <section className="rounded-xl border bg-card p-5"><p className="font-semibold">Niste prijavljeni.</p><p className="mt-1 text-sm text-muted-foreground">Prijavite se z zdravniškim računom, da vidite svoje paciente.</p><Link to="/auth" className="mt-3 inline-flex items-center gap-2 font-semibold text-primary">Prijava <ArrowRight className="size-4" /></Link></section>}
     {loading && <p role="status" className="rounded-xl border bg-card p-5">Nalagam paciente, klice in meritve ...</p>}
     {error && <p role="alert" className="rounded-xl border border-destructive bg-card p-5 text-destructive">{error}</p>}
     {!loading && hasToken && !error && <>
@@ -120,7 +126,7 @@ export function RealDoctorDashboard() {
                 <div><p className="text-xs text-muted-foreground">SpO₂</p><p>{vitals ? `${vitals.spo2} %` : "Ni podatka"}</p></div>
               </div>
               {r.error && <p className="mt-2 text-xs text-destructive">{r.error}</p>}
-              <div className="mt-3 flex justify-end"><Link to="/zdravnik/pacient/$id" params={{ id: r.patient.id }} className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">Odpri pacienta <ArrowRight className="size-4" /></Link></div>
+              <div className="mt-3 flex flex-wrap items-start justify-end gap-2"><CallButton patientId={r.patient.id} /><Link to="/zdravnik/pacient/$id" params={{ id: r.patient.id }} className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">Odpri pacienta <ArrowRight className="size-4" /></Link></div>
             </article>;
           })}</div>}
       </section>

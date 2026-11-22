@@ -11,3 +11,4 @@ build/
 *.log
 *.db
 .DS_Store
+backend/tts_cache/

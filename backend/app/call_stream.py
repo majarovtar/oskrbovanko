@@ -294,7 +294,7 @@ class CallSession:
         self.db.commit()
         self.db.refresh(call)
 
-        reassess_and_notify(self.db, call, self.patient.name, self.background_tasks)
+        reassess_and_notify(self.db, call, self.patient.name, self.background_tasks, new_entry=True)
 
         await self._send_client_json({"type": "call_saved", "call_id": str(call.id)})
 
