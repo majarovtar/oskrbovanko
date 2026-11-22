@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { pageHead } from "@/lib/page-head";
+import { CallButton } from "@/components/dashboard/call-button";
 
 // Development-only FastAPI integration. Use the real login/session in production.
 const API_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -73,7 +74,10 @@ function RealDoctorPatientDetail({ id }: { id: string }) {
       <header className="rounded-xl border bg-card p-5 shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="text-3xl font-bold">{patient.name}</h1><p className="mt-1 text-sm text-muted-foreground">Predvideni klic: {patient.call_time || "Ni določeno"} · Zadnji klic: {formatDate(lastCall?.started_at)}</p></div>
-          {lastCall?.severity === "critical" ? <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-800">Kritično opozorilo</span> : <span className="rounded-full bg-muted px-3 py-1 text-sm">{lastCall ? "Zadnji klic shranjen" : "Klic še ni opravljen"}</span>}
+          <div className="flex flex-wrap items-start gap-2">
+            {lastCall?.severity === "critical" ? <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-800">Kritično opozorilo</span> : <span className="rounded-full bg-muted px-3 py-1 text-sm">{lastCall ? "Zadnji klic shranjen" : "Klic še ni opravljen"}</span>}
+            <CallButton patientId={patient.id} />
+          </div>
         </div>
         {lastCall?.severity_reasons?.length ? <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-900">{lastCall.severity_reasons.join(" · ")}</p> : null}
         <p className="mt-3 text-xs text-muted-foreground">Povzetek AI trenutno ni na voljo v API. Opozorila se prikazujejo samo iz shranjenih rezultatov klica.</p>
