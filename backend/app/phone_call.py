@@ -41,8 +41,6 @@ QUESTIONS = [
     "Ali je oko bolj rdeče kot včeraj?",
     "Ali vidite bliske, pike ali temno senco?",
     "Ali vam je slabo ali ste bruhali?",
-    "Ali ste danes kapali kapljice za oko?",
-    "Ali ponoči nosite ščitnik za oko?",
 ]
 INTRO = ("Dober dan. Tukaj avtomatska asistentka. Kličem zaradi pregleda po operaciji. "
          "Prosim, položite prst na merilno napravo in ga ne premikajte. Meritev traja dvajset sekund.")
